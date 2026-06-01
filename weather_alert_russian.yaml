@@ -1,34 +1,30 @@
-# weather_alert_russian.yaml
-# Автоматизация: Уведомления об изменении погоды (дождь, снег, мороз, жара)
-# Язык уведомлений: русский
-# Совместимость: Home Assistant 2024.6+
+# weather_alert_russian_fixed.yaml
+# Автоматизация: Уведомления об изменении погоды
+# Язык: русский | Совместимость: HA 2024.6+
 
 blueprint:
-  name: 🌦️ Уведомления о погоде (русский язык)
-  description: |
-    Отправляет уведомление на русском языке, когда в прогнозе ожидаются:
-    • Дождь или снег
-    • Температура ниже/выше заданного порога
-    • Осадки превышают указанный порог в мм
-    
-    Поддерживает почасовой прогноз и гибкую настройку временного окна.
+  name: "🌦️ Уведомления о погоде (русский язык)"
+  description: "Отправляет уведомление на русском при ожидаемых осадках (дождь, снег) или экстремальных температурах в заданном временном окне."
   domain: automation
-  author: Qwen3.6 Assistant
+  author: "Qwen3.6 Assistant"
+  source_url: "https://github.com/your-repo/weather-alert-ru"
+  
   input:
     weather_entity:
-      name: 🌡️ Сущность погоды
-      description: Выберите вашу интеграцию погоды (например, weather.home)
+      name: "🌡️ Сущность погоды"
+      description: "Выберите интеграцию погоды (например, weather.home)"
       selector:
         entity:
           domain: weather
+          multiple: false
     notify_service:
-      name: 🔔 Сервис уведомлений
-      description: Имя сервиса уведомлений БЕЗ префикса "notify." (например: telegram_bot, mobile_app_iphone)
+      name: "🔔 Сервис уведомлений"
+      description: "Имя сервиса БЕЗ префикса notify. (пример: telegram_bot)"
       selector:
         text:
     time_window_hours:
-      name: ⏱️ Временное окно прогноза
-      description: На сколько часов вперёд анализировать прогноз (макс. 24)
+      name: "⏱️ Временное окно прогноза"
+      description: "На сколько часов вперёд анализировать прогноз (1-24)"
       default: 12
       selector:
         number:
@@ -37,22 +33,22 @@ blueprint:
           step: 1
           mode: slider
     enable_rain:
-      name: 🌧️ Уведомлять о дожде
+      name: "🌧️ Уведомлять о дожде"
       default: true
       selector:
         boolean:
     enable_snow:
-      name: ❄️ Уведомлять о снеге
+      name: "❄️ Уведомлять о снеге"
       default: true
       selector:
         boolean:
     enable_cold:
-      name: 🥶 Уведомлять о морозе
+      name: "🥶 Уведомлять о морозе"
       default: false
       selector:
         boolean:
     cold_threshold:
-      name: 🌡️ Порог низкой температуры (°C)
+      name: "🌡️ Порог низкой температуры (°C)"
       default: 0
       selector:
         number:
@@ -60,12 +56,12 @@ blueprint:
           max: 20
           step: 1
     enable_hot:
-      name: 🥵 Уведомлять о жаре
+      name: "🥵 Уведомлять о жаре"
       default: false
       selector:
         boolean:
     hot_threshold:
-      name: 🌡️ Порог высокой температуры (°C)
+      name: "🌡️ Порог высокой температуры (°C)"
       default: 30
       selector:
         number:
@@ -73,8 +69,8 @@ blueprint:
           max: 50
           step: 1
     min_precipitation_mm:
-      name: 💧 Мин. количество осадков (мм) для уведомления
-      description: Уведомление сработает только если ожидаемые осадки превысят это значение
+      name: "💧 Мин. осадки для уведомления (мм)"
+      description: "Уведомление сработает только если осадки превысят это значение"
       default: 0.5
       selector:
         number:
@@ -82,8 +78,8 @@ blueprint:
           max: 100
           step: 0.1
     trigger_schedule:
-      name: ⏰ Расписание проверки
-      description: Когда запускать проверку прогноза (рекомендуется: каждые 30-60 мин)
+      name: "⏰ Расписание проверки"
+      description: "Когда запускать проверку прогноза"
       selector:
         trigger:
 
@@ -92,7 +88,7 @@ trigger: !input trigger_schedule
 condition: []
 
 action:
-  # === 1. Получение почасового прогноза ===
+  # Получение почасового прогноза
   - action: weather.get_forecasts
     data:
       type: hourly
@@ -100,113 +96,85 @@ action:
       entity_id: !input weather_entity
     response_variable: forecast_data
 
-  # === 2. Обработка данных и переменные ===
+  # Обработка данных
   - variables:
       weather_entity: !input weather_entity
       notify_target: "notify.{{ notify_service }}"
       hours_to_check: !input time_window_hours
       precip_threshold: !input min_precipitation_mm
+      cold_threshold: !input cold_threshold
+      enable_cold: !input enable_cold
+      hot_threshold: !input hot_threshold
+      enable_hot: !input enable_hot
       
-      # Извлечение прогноза
-      hourly_forecast: >
-        {{ forecast_data[weather_entity].forecast[:hours_to_check] }}
+      hourly_forecast: "{{ forecast_data[weather_entity].forecast[:hours_to_check] }}"
       
-      # Фильтрация по условиям
-      rainy_hours: >
-        {{ hourly_forecast | selectattr('condition', 'search', '(?i)rain|дождь|ливень') | list }}
-      snowy_hours: >
-        {{ hourly_forecast | selectattr('condition', 'search', '(?i)snow|снег|метель') | list }}
-      cold_hours: >
-        {{ hourly_forecast | selectattr('temperature', '<=', cold_threshold) | list if enable_cold else [] }}
-      hot_hours: >
-        {{ hourly_forecast | selectattr('temperature', '>=', hot_threshold) | list if enable_hot else [] }}
+      rainy_hours: "{{ hourly_forecast | selectattr('condition', 'search', '(?i)rain|дождь|ливень') | list }}"
+      snowy_hours: "{{ hourly_forecast | selectattr('condition', 'search', '(?i)snow|снег|метель') | list }}"
+      cold_hours: "{% if enable_cold %}{{ hourly_forecast | selectattr('temperature', '<=', cold_threshold) | list }}{% else %}[]{% endif %}"
+      hot_hours: "{% if enable_hot %}{{ hourly_forecast | selectattr('temperature', '>=', hot_threshold) | list }}{% else %}[]{% endif %}"
       
-      # Расчёт суммарных осадков
-      total_rain_mm: >
-        {{ rainy_hours | map(attribute='precipitation') | select('number') | sum | round(1) }}
-      total_snow_mm: >
-        {{ snowy_hours | map(attribute='precipitation') | select('number') | sum | round(1) }}
+      total_rain_mm: "{{ (rainy_hours | map(attribute='precipitation') | select('number') | sum | default(0)) | round(1) }}"
+      total_snow_mm: "{{ (snowy_hours | map(attribute='precipitation') | select('number') | sum | default(0)) | round(1) }}"
       
-      # Флаги срабатывания
-      should_alert_rain: >
-        {{ enable_rain and rainy_hours | length > 0 and total_rain_mm >= precip_threshold }}
-      should_alert_snow: >
-        {{ enable_snow and snowy_hours | length > 0 and total_snow_mm >= precip_threshold }}
-      should_alert_cold: >
-        {{ enable_cold and cold_hours | length >= 2 }}
-      should_alert_hot: >
-        {{ enable_hot and hot_hours | length >= 2 }}
+      should_alert_rain: "{{ enable_rain and rainy_hours | length > 0 and total_rain_mm >= precip_threshold }}"
+      should_alert_snow: "{{ enable_snow and snowy_hours | length > 0 and total_snow_mm >= precip_threshold }}"
+      should_alert_cold: "{{ enable_cold and cold_hours | length >= 2 }}"
+      should_alert_hot: "{{ enable_hot and hot_hours | length >= 2 }}"
 
-  # === 3. Формирование сообщения на русском ===
+  # Формирование сообщения
   - variables:
-      # Вспомогательная функция для форматирования времени
-      format_time: >
-        {% macro fmt(dt) %}{{ dt | as_datetime | as_local | strftime('%H:%M') }}{% endmacro %}
-        
-      # Определение первого часа с осадками
-      first_rain_time: >
-        {{ rainy_hours[0].datetime | as_datetime | as_local | strftime('%H:%M') if rainy_hours else '' }}
-      first_snow_time: >
-        {{ snowy_hours[0].datetime | as_datetime | as_local | strftime('%H:%M') if snowy_hours else '' }}
-      min_temp_time: >
-        {{ hourly_forecast | sort(attribute='temperature') | first | default({}).datetime | as_datetime | as_local | strftime('%H:%M') }}
-      max_temp_time: >
-        {{ hourly_forecast | sort(attribute='temperature') | last | default({}).datetime | as_datetime | as_local | strftime('%H:%M') }}
-      
-      # Сборка текста уведомления
-      alert_parts: []
-      
+      first_rain_time: "{% if rainy_hours %}{{ rainy_hours[0].datetime | as_datetime | as_local | strftime('%H:%M') }}{% else %}{% endif %}"
+      first_snow_time: "{% if snowy_hours %}{{ snowy_hours[0].datetime | as_datetime | as_local | strftime('%H:%M') }}{% else %}{% endif %}"
+      min_temp_entry: "{{ hourly_forecast | sort(attribute='temperature') | first | default({}) }}"
+      max_temp_entry: "{{ hourly_forecast | sort(attribute='temperature') | last | default({}) }}"
+      min_temp_time: "{% if min_temp_entry %}{{ min_temp_entry.datetime | as_datetime | as_local | strftime('%H:%M') }}{% else %}{% endif %}"
+      max_temp_time: "{% if max_temp_entry %}{{ max_temp_entry.datetime | as_datetime | as_local | strftime('%H:%M') }}{% else %}{% endif %}"
+
   - variables:
       message_parts: >
         {% set parts = [] %}
-        
         {% if should_alert_rain %}
-          {% set _ = parts.append('🌧️ Ожидается дождь около ' ~ first_rain_time ~ 
-             (' (~' ~ total_rain_mm ~ ' мм)' if total_rain_mm > 0 else '')) %}
+          {% set rain_text = '🌧️ Ожидается дождь около ' ~ first_rain_time %}
+          {% if total_rain_mm > 0 %}{% set rain_text = rain_text ~ ' (~' ~ total_rain_mm ~ ' мм)' %}{% endif %}
+          {% set _ = parts.append(rain_text) %}
         {% endif %}
-        
         {% if should_alert_snow %}
-          {% set _ = parts.append('❄️ Ожидается снег около ' ~ first_snow_time ~ 
-             (' (~' ~ total_snow_mm ~ ' мм)' if total_snow_mm > 0 else '')) %}
+          {% set snow_text = '❄️ Ожидается снег около ' ~ first_snow_time %}
+          {% if total_snow_mm > 0 %}{% set snow_text = snow_text ~ ' (~' ~ total_snow_mm ~ ' мм)' %}{% endif %}
+          {% set _ = parts.append(snow_text) %}
         {% endif %}
-        
         {% if should_alert_cold %}
           {% set min_temp = hourly_forecast | map(attribute='temperature') | min | round(1) %}
           {% set _ = parts.append('🥶 Температура опустится до ' ~ min_temp ~ '°C около ' ~ min_temp_time) %}
         {% endif %}
-        
         {% if should_alert_hot %}
           {% set max_temp = hourly_forecast | map(attribute='temperature') | max | round(1) %}
           {% set _ = parts.append('🥵 Температура поднимется до ' ~ max_temp ~ '°C около ' ~ max_temp_time) %}
         {% endif %}
-        
         {{ parts | join('\n') }}
       
       final_message: >
         {% if message_parts %}
           ⚠️ *Прогноз погоды на ближайшие {{ hours_to_check }} часов:*
-          
-          {{ message_parts }}
-          
-          _Рекомендуем взять зонт / одеться теплее_
-        {% else %}
-          ''
-        {% endif %}
-      
-      alert_title: "🌦️ Погодное предупреждение"
 
-  # === 4. Отправка уведомления (только если есть что сообщить) ===
+          {{ message_parts }}
+
+          _Рекомендуем взять зонт / одеться теплее_
+        {% else %}{% endif %}
+
+  # Отправка уведомления
   - condition: template
-    value_template: "{{ message_parts | length > 0 }}"
+    value_template: "{{ message_parts | default('') | length > 0 }}"
     
-  - action: "{{ notify_target }}"
+  - action: "notify.{{ notify_service }}"
     data:
-      title: "{{ alert_title }}"
+      title: "🌦️ Погодное предупреждение"
       message: "{{ final_message }}"
       data:
         priority: high
-        tag: weather_alert_ru
-        icon: mdi:weather-cloudy-alert
+        tag: "weather_alert_ru"
+        icon: "mdi:weather-cloudy-alert"
 
 mode: single
 max_exceeded: silent
